@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cursa HUD</string>
+    <string name="service_desc">Citește oferta de cursă din Bolt/Uber și afișează lei/km net, km total și timp total. Nu apasă nimic și nu trimite date nicăieri.</string>
+</resources>

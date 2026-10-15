@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ro.razvan.cursahud'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'ro.razvan.cursahud'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        // Cheie fixă în repo, ca update-urile să se instaleze peste versiunea veche.
+        fixed {
+            storeFile file('release.keystore')
+            storePassword 'cursahud'
+            keyAlias 'cursahud'
+            keyPassword 'cursahud'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.fixed
+        }
+        debug {
+            signingConfig signingConfigs.fixed
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
