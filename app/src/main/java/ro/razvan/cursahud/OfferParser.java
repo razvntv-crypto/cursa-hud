@@ -16,12 +16,13 @@ public final class OfferParser {
         public double tripKm, tripMin;
         public double multiplier; // 0 dacă nu există
         public boolean hasPickup;
+        public String app; // "BOLT" / "UBER" / "TEST"
 
         public double totalKm() { return pickupKm + tripKm; }
         public double totalMin() { return pickupMin + tripMin; }
 
         public String key() {
-            return price + "|" + pickupKm + "|" + pickupMin + "|" + tripKm + "|" + tripMin;
+            return app + "|" + price + "|" + pickupKm + "|" + pickupMin + "|" + tripKm + "|" + tripMin;
         }
     }
 

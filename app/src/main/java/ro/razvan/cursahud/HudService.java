@@ -20,6 +20,7 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -38,8 +39,8 @@ public class HudService extends AccessibilityService {
     private WindowManager wm;
     private LinearLayout hud;
     private WindowManager.LayoutParams lp;
-    private TextView tvTop, tvBig, tvMid, tvSmall;
-    private GradientDrawable bg;
+    private TextView tvTop, tvBig, tvMid, tvSmall, tvApp;
+    private GradientDrawable bg, appBg;
 
     private String shownKey = null;
     private String dismissedKey = null;
@@ -99,32 +100,54 @@ public class HudService extends AccessibilityService {
 
     private void scanNow() {
         scanPending = false;
-        StringBuilder sb = new StringBuilder(2048);
-        int[] count = {0};
+        // Fiecare fereastră se citește separat, ca să știm din ce aplicație vine oferta
+        // (șoferul poate avea Bolt și Uber pornite în același timp).
+        OfferParser.Offer o = null;
+        String app = null;
+        boolean sawTargetText = false;
         try {
+            List<AccessibilityNodeInfo> roots = new ArrayList<>();
             List<AccessibilityWindowInfo> wins = getWindows();
             if (wins != null && !wins.isEmpty()) {
                 for (AccessibilityWindowInfo w : wins) {
                     AccessibilityNodeInfo r = w.getRoot();
-                    if (r == null) continue;
-                    if (isTarget(r.getPackageName())) collect(r, sb, count, 0);
+                    if (r != null && isTarget(r.getPackageName())) roots.add(r);
                 }
             } else {
                 AccessibilityNodeInfo r = getRootInActiveWindow();
-                if (r != null && isTarget(r.getPackageName())) collect(r, sb, count, 0);
+                if (r != null && isTarget(r.getPackageName())) roots.add(r);
+            }
+            for (AccessibilityNodeInfo r : roots) {
+                StringBuilder sb = new StringBuilder(2048);
+                collect(r, sb, new int[]{0}, 0);
+                if (sb.length() > 0) sawTargetText = true;
+                OfferParser.Offer found = OfferParser.parse(sb.toString(), true);
+                if (found != null) {
+                    o = found;
+                    app = appName(r.getPackageName());
+                    break;
+                }
             }
         } catch (Exception ignored) {}
 
-        OfferParser.Offer o = OfferParser.parse(sb.toString(), true);
         if (o == null) {
-            if (sb.length() > 0) hide(); // ecranul aplicației s-a schimbat, oferta a dispărut
+            if (sawTargetText) hide(); // ecranul aplicației s-a schimbat, oferta a dispărut
             return;
         }
+        o.app = app;
         String key = o.key();
         if (key.equals(dismissedKey)) return;
         if (!key.equals(shownKey)) show(o);
         h.removeCallbacks(autoHide);
         h.postDelayed(autoHide, AUTO_HIDE_MS);
+    }
+
+    /** Bolt Driver = ee.mtakso.driver, Uber Driver = com.ubercab.driver */
+    static String appName(CharSequence pkg) {
+        String p = pkg == null ? "" : pkg.toString().toLowerCase(Locale.ROOT);
+        if (p.contains("uber")) return "UBER";
+        if (p.contains("mtakso") || p.contains("bolt")) return "BOLT";
+        return "TEST";
     }
 
     private void collect(AccessibilityNodeInfo n, StringBuilder sb, int[] count, int depth) {
@@ -166,10 +189,14 @@ public class HudService extends AccessibilityService {
 
     // ---------- HUD ----------
 
+    private boolean demoUber = false;
+
     void showDemo() {
         OfferParser.Offer o = new OfferParser.Offer();
         o.price = 45.0; o.hasPickup = true;
         o.pickupKm = 3.5; o.pickupMin = 11; o.tripKm = 6.2; o.tripMin = 23; o.multiplier = 1.3;
+        o.app = demoUber ? "UBER" : "BOLT";
+        demoUber = !demoUber; // demo-ul alternează Bolt / Uber
         dismissedKey = null;
         show(o);
         h.removeCallbacks(autoHide);
@@ -185,6 +212,18 @@ public class HudService extends AccessibilityService {
         String mult = o.multiplier > 0 ? String.format(RO, " · ↑%.1fx", o.multiplier) : "";
         tvTop.setText(String.format(RO, "%s · %.2f lei%s", r.label, o.price, mult));
         tvTop.setTextColor(r.color);
+        String app = o.app == null ? "TEST" : o.app;
+        tvApp.setText(app);
+        if (app.equals("UBER")) {        // Uber: negru pe alb
+            appBg.setColor(Color.WHITE);
+            tvApp.setTextColor(Color.BLACK);
+        } else if (app.equals("BOLT")) { // Bolt: verdele lor
+            appBg.setColor(0xFF34D186);
+            tvApp.setTextColor(0xFF0B0D10);
+        } else {
+            appBg.setColor(0xFF555B66);
+            tvApp.setTextColor(Color.WHITE);
+        }
         tvBig.setText(String.format(RO, "%.2f lei/km net", r.netPerKm));
         tvBig.setTextColor(r.color);
         tvMid.setText(String.format(RO, "%.1f km · %d min · %.0f lei/h · profit %.2f lei",
@@ -223,12 +262,25 @@ public class HudService extends AccessibilityService {
         hud.setBackground(bg);
 
         tvTop = tv(16, true);
+        tvApp = tv(14, true);
+        tvApp.setPadding(dp(8), dp(3), dp(8), dp(3));
+        tvApp.setLetterSpacing(0.08f);
+        appBg = new GradientDrawable();
+        appBg.setCornerRadius(dp(6));
+        tvApp.setBackground(appBg);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(tvApp);
+        LinearLayout.LayoutParams topLp = new LinearLayout.LayoutParams(-2, -2);
+        topLp.leftMargin = dp(8);
+        row.addView(tvTop, topLp);
         tvBig = tv(30, true);
         tvMid = tv(15, true);
         tvMid.setTextColor(Color.WHITE);
         tvSmall = tv(12, false);
         tvSmall.setTextColor(0xFFB8C0CC);
-        hud.addView(tvTop);
+        hud.addView(row);
         hud.addView(tvBig);
         hud.addView(tvMid);
         hud.addView(tvSmall);
